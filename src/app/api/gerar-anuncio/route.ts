@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { gerarScript, gerarLinhas, type Estilo } from "@/lib/script-generator";
+import { gerarScriptIA } from "@/lib/ai-script-generator";
+import { type Estilo } from "@/lib/script-generator";
 import { generateVoice } from "@/lib/tts";
 import { getCredits, deductCredit } from "@/lib/credits";
 import { prisma } from "@/lib/prisma";
@@ -13,14 +14,21 @@ export async function POST(req: NextRequest) {
 
   const email = session.user.email;
 
-  let body: { produto: string; beneficio: string; preco?: string; estilo: Estilo; voz?: string };
+  let body: {
+    produto: string;
+    beneficio: string;
+    preco?: string;
+    estilo: Estilo;
+    voz?: string;
+    imagemUrl?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Corpo inválido" }, { status: 400 });
   }
 
-  const { produto, beneficio, preco, estilo, voz } = body;
+  const { produto, beneficio, preco, estilo, voz, imagemUrl } = body;
 
   if (!produto || typeof produto !== "string" || produto.trim().length < 2) {
     return NextResponse.json({ error: "Nome do produto obrigatório (mín. 2 caracteres)" }, { status: 400 });
@@ -42,15 +50,20 @@ export async function POST(req: NextRequest) {
 
   if (credits < 1) {
     return NextResponse.json(
-      { error: "Sem créditos. Compre um plano para continuar.", credits: 0 },
+      { error: "Sem tokens. Compre um plano para continuar.", credits: 0 },
       { status: 402 }
     );
   }
 
-  const script = gerarScript({ produto: produto.trim(), beneficio: beneficio.trim(), preco, estilo });
-  const linhas = gerarLinhas({ produto: produto.trim(), beneficio: beneficio.trim(), preco, estilo });
+  // Gerar script com IA (Claude) ou fallback para templates
+  const { script, linhas } = await gerarScriptIA({
+    produto: produto.trim(),
+    beneficio: beneficio.trim(),
+    preco,
+    estilo,
+  });
 
-  // Tentar gerar voz com ElevenLabs (silencioso se falhar)
+  // Gerar voz com ElevenLabs
   const audioBuffer = await generateVoice(script, voz ?? "feminina");
 
   let remaining: number;
@@ -69,26 +82,23 @@ export async function POST(req: NextRequest) {
     // não bloqueia se falhar
   }
 
+  // Retornar áudio com metadados, ou JSON se sem áudio
   if (audioBuffer) {
-    // Retornar audio + metadados no header
-    const res = new NextResponse(audioBuffer, {
-      headers: {
-        "Content-Type": "audio/mpeg",
-        "X-Credits-Remaining": String(remaining),
-        "X-Script": encodeURIComponent(script),
-        "X-Linhas": encodeURIComponent(JSON.stringify(linhas)),
-        "Access-Control-Expose-Headers": "X-Credits-Remaining, X-Script, X-Linhas",
-      },
-    });
-    return res;
+    const headers: Record<string, string> = {
+      "Content-Type": "audio/mpeg",
+      "X-Credits-Remaining": String(remaining),
+      "X-Script": encodeURIComponent(script),
+      "X-Linhas": encodeURIComponent(JSON.stringify(linhas)),
+      "Access-Control-Expose-Headers": "X-Credits-Remaining, X-Script, X-Linhas",
+    };
+    if (imagemUrl) {
+      headers["X-Imagem-Url"] = encodeURIComponent(imagemUrl);
+    }
+    return new NextResponse(audioBuffer, { headers });
   }
 
-  // Fallback: retornar apenas script (sem áudio)
   return NextResponse.json(
-    { script, linhas, credits: remaining, audioDisponivel: false },
-    {
-      status: 200,
-      headers: { "X-Credits-Remaining": String(remaining) },
-    }
+    { script, linhas, credits: remaining, audioDisponivel: false, imagemUrl },
+    { status: 200, headers: { "X-Credits-Remaining": String(remaining) } }
   );
 }
