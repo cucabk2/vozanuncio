@@ -168,7 +168,7 @@ export default function VideoCreator({ initialCredits }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (credits < 1) {
-      setError("Sem créditos. Compre um plano abaixo.");
+      setError("Sem tokens. Compre um plano abaixo.");
       return;
     }
     setLoading(true);
@@ -267,10 +267,10 @@ export default function VideoCreator({ initialCredits }: Props) {
         credits < 1 ? "bg-red-500/10 border border-red-500/30" : "bg-orange-500/10 border border-orange-500/20"
       }`}>
         <span className={credits < 1 ? "text-red-300" : "text-orange-300"}>
-          🎬 {credits} {credits === 1 ? "crédito restante" : "créditos restantes"}
+          🎬 {credits} {credits === 1 ? "token restante" : "tokens restantes"}
         </span>
         <span className={`text-xs ${credits < 1 ? "text-red-400" : "text-white/40"}`}>
-          {credits < 1 ? "Sem saldo — compre um plano" : "1 crédito = 1 anúncio completo"}
+          {credits < 1 ? "Sem saldo — compre um plano" : "1 token = 1 anúncio completo"}
         </span>
       </div>
 
@@ -366,7 +366,7 @@ export default function VideoCreator({ initialCredits }: Props) {
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Gerando anúncio…</>
             ) : (
-              <><Sparkles className="w-4 h-4" /> Gerar Anúncio (1 🎬)</>
+              <><Sparkles className="w-4 h-4" /> Gerar Anúncio (1 token 🎬)</>
             )}
           </button>
         </form>

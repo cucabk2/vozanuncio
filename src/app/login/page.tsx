@@ -37,7 +37,7 @@ export default function LoginPage() {
             </button>
           </form>
           <p className="text-white/30 text-xs text-center mt-4">
-            Ao entrar, você recebe 3 vídeos grátis
+            Ao entrar, você recebe 30 tokens grátis — sem cartão
           </p>
         </div>
       </div>

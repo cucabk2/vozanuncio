@@ -67,9 +67,9 @@ export default async function DashboardPage({
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
           {[
-            { label: "Créditos", value: `🎬 ${credits}`, color: "from-orange-500 to-pink-600", Icon: Zap },
+            { label: "Tokens", value: `🎬 ${credits}`, color: "from-orange-500 to-pink-600", Icon: Zap },
             { label: "Anúncios disponíveis", value: String(credits), color: "from-pink-600 to-purple-600", Icon: Sparkles },
-            { label: "Plano atual", value: credits > 3 ? "Pago" : "Grátis", color: "from-purple-600 to-blue-600", Icon: Star },
+            { label: "Plano atual", value: credits > 30 ? "Pago" : "Grátis", color: "from-purple-600 to-blue-600", Icon: Star },
           ].map(({ label, value, color, Icon }) => (
             <div key={label} className="rounded-2xl border border-white/8 p-4" style={{ background: "rgba(255,255,255,0.03)" }}>
               <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${color} flex items-center justify-center mb-3`}>
@@ -100,10 +100,10 @@ export default async function DashboardPage({
           <div className="space-y-4">
             {/* Créditos card */}
             <div className="rounded-2xl border border-orange-500/20 p-5" style={{ background: "rgba(249,115,22,0.06)" }}>
-              <p className="text-orange-300 text-xs font-semibold uppercase tracking-wider mb-2">Seus Créditos</p>
+              <p className="text-orange-300 text-xs font-semibold uppercase tracking-wider mb-2">Seus Tokens</p>
               <p className="text-4xl font-black text-white mb-1">🎬 {credits}</p>
               <p className="text-white/50 text-sm mb-4">
-                Cada anúncio usa 1 crédito.<br />
+                Cada anúncio usa 1 token.<br />
                 Script + voz + animação incluídos.
               </p>
               <a
