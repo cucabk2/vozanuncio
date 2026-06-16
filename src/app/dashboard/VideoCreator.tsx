@@ -660,8 +660,11 @@ export default function VideoCreator({ initialCredits }: Props) {
           )}
 
           {!resultado.audioDisponivel && (
-            <p className="text-white/25 text-xs text-center">
-              Voz via sintetizador do browser. Configure ElevenLabs para voz profissional.
+            <p className="text-white/40 text-xs text-center">
+              Voz via browser (sem créditos OpenAI).{" "}
+              <a href="https://platform.openai.com/settings/billing/overview" target="_blank" rel="noopener" className="underline hover:text-white/70">
+                Adicionar créditos →
+              </a>
             </p>
           )}
 
