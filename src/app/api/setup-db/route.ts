@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 
 export async function GET() {
-  try {
-    // Test connection and create tables if needed
-    const result = await prisma.$queryRaw`
-      SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public'
-    ` as Array<{ table_name: string }>;
+  const url = process.env.DATABASE_URL ?? "UNDEFINED";
+  // Only show non-secret part for debugging
+  const safe = url.replace(/:([^@]+)@/, ":***@");
 
-    const tables = result.map((r) => r.table_name);
+  try {
+    const { Client } = await import("pg");
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    const r = await client.query(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+    );
+    const tables = (r.rows as Array<{ table_name: string }>).map((row) => row.table_name);
 
     if (!tables.includes("UserCredits")) {
-      await prisma.$executeRaw`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS "UserCredits" (
           "email"     TEXT        PRIMARY KEY,
           "credits"   INTEGER     NOT NULL DEFAULT 30,
@@ -20,11 +23,10 @@ export async function GET() {
           "createdAt" TIMESTAMP   NOT NULL DEFAULT NOW(),
           "updatedAt" TIMESTAMP   NOT NULL DEFAULT NOW()
         )
-      `;
+      `);
     }
-
     if (!tables.includes("Anuncio")) {
-      await prisma.$executeRaw`
+      await client.query(`
         CREATE TABLE IF NOT EXISTS "Anuncio" (
           "id"        TEXT        PRIMARY KEY,
           "email"     TEXT        NOT NULL,
@@ -33,16 +35,20 @@ export async function GET() {
           "estilo"    TEXT        NOT NULL,
           "createdAt" TIMESTAMP   NOT NULL DEFAULT NOW()
         )
-      `;
+      `);
     }
 
-    const tablesAfter = (await prisma.$queryRaw`
-      SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public'
-    ` as Array<{ table_name: string }>).map((r) => r.table_name);
+    const r2 = await client.query(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+    );
+    await client.end();
 
-    return NextResponse.json({ ok: true, tables: tablesAfter });
+    return NextResponse.json({
+      ok: true,
+      url_safe: safe,
+      tables: (r2.rows as Array<{ table_name: string }>).map((row) => row.table_name),
+    });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ ok: false, url_safe: safe, error: String(e) }, { status: 500 });
   }
 }
