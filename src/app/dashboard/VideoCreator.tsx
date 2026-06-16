@@ -317,16 +317,92 @@ export default function VideoCreator({ initialCredits }: Props) {
       setCredits(remaining);
       setResultado({ script, linhas, audioUrl, audioDisponivel, imagemUrl, audioDuration });
 
+      // Preview animation starts immediately
       setTimeout(() => {
         startAnimation(linhas, form.estilo, audioDuration);
         if (audioUrl && audioRef.current) { audioRef.current.play(); setPlaying(true); }
         else playBrowserTTS(script);
       }, 100);
+
+      // Auto-record + download 1.5s later (gives image time to decode)
+      const nomeProduto = form.produto;
+      const estiloCaptura = form.estilo;
+      setTimeout(() => {
+        gravarEBaixar({ linhas, audioUrl, audioDisponivel, audioDuration, estilo: estiloCaptura, nomeProduto });
+      }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro desconhecido");
     } finally {
       setLoading(false);
       setLoadingStep("");
+    }
+  }
+
+  async function gravarEBaixar({ linhas, audioUrl, audioDisponivel, audioDuration, estilo, nomeProduto }: {
+    linhas: string[]; audioUrl: string | null; audioDisponivel: boolean;
+    audioDuration: number; estilo: Estilo; nomeProduto: string;
+  }) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setRecording(true);
+    setRecorded(null);
+    const chunks: Blob[] = [];
+
+    function autoStop(recorder: MediaRecorder, blobUrl: string) {
+      const slug = nomeProduto.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 30);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `vozanuncio-${slug}.webm`;
+      a.click();
+      setRecorded(blobUrl);
+      setRecording(false);
+    }
+
+    try {
+      const canvasStream = canvas.captureStream(30);
+
+      if (audioUrl && audioDisponivel) {
+        const audioCtx = new AudioContext();
+        const dest = audioCtx.createMediaStreamDestination();
+        const resp = await fetch(audioUrl);
+        const buf = await resp.arrayBuffer();
+        const decoded = await audioCtx.decodeAudioData(buf);
+        const gain = audioCtx.createGain();
+        gain.gain.value = 1;
+        gain.connect(dest);
+        const source = audioCtx.createBufferSource();
+        source.buffer = decoded;
+        source.connect(gain);
+        const combined = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
+        const recorder = new MediaRecorder(combined, { mimeType });
+        mediaRecorderRef.current = recorder;
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: "video/webm" });
+          autoStop(recorder, URL.createObjectURL(blob));
+          audioCtx.close();
+        };
+        recorder.start(100);
+        startAnimation(linhas, estilo, audioDuration);
+        source.start();
+        setTimeout(() => { if (recorder.state !== "inactive") recorder.stop(); }, (audioDuration + 0.8) * 1000);
+      } else {
+        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
+        const recorder = new MediaRecorder(canvasStream, { mimeType });
+        mediaRecorderRef.current = recorder;
+        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: "video/webm" });
+          autoStop(recorder, URL.createObjectURL(blob));
+        };
+        recorder.start(100);
+        startAnimation(linhas, estilo, audioDuration);
+        setTimeout(() => { if (recorder.state !== "inactive") recorder.stop(); }, (audioDuration + 0.8) * 1000);
+      }
+    } catch {
+      setRecording(false);
+      setError("Erro ao gravar vídeo.");
     }
   }
 
