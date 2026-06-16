@@ -30,7 +30,7 @@ export async function generateProductImage(
       quality: "standard",
     });
 
-    return response.data[0]?.url ?? null;
+    return response.data?.[0]?.url ?? null;
   } catch (err) {
     console.error("DALL-E error:", err);
     return null;
