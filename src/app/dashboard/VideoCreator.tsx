@@ -341,27 +341,34 @@ export default function VideoCreator({ initialCredits }: Props) {
     setRecording(true);
     setRecorded(null);
     const chunks: Blob[] = [];
+    const slug = nomeProduto.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 30);
 
-    async function autoStop(_recorder: MediaRecorder, webmBlob: Blob) {
-      const slug = nomeProduto.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 30);
+    // Prefer native H.264 MP4 recording (Chrome 130+) — no ffmpeg needed
+    const nativeMp4 =
+      MediaRecorder.isTypeSupported("video/mp4;codecs=h264,mp4a.40.2") ? "video/mp4;codecs=h264,mp4a.40.2" :
+      MediaRecorder.isTypeSupported("video/mp4;codecs=avc1") ? "video/mp4;codecs=avc1" :
+      MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" :
+      null;
+
+    function onDone(blob: Blob, ext: "mp4" | "webm") {
+      const url = URL.createObjectURL(blob);
+      setRecorded(url);
+      setRecording(false);
+      setConverting(false);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vozanuncio-${slug}.${ext}`;
+      a.click();
+    }
+
+    async function onWebmBlob(blob: Blob) {
       setRecording(false);
       setConverting(true);
       try {
-        const mp4Blob = await webmToMp4(webmBlob);
-        const mp4Url = URL.createObjectURL(mp4Blob);
-        setRecorded(mp4Url);
-        const a = document.createElement("a");
-        a.href = mp4Url;
-        a.download = `vozanuncio-${slug}.mp4`;
-        a.click();
+        const mp4Blob = await webmToMp4(blob);
+        onDone(mp4Blob, "mp4");
       } catch {
-        // fallback: download webm if conversion fails
-        const webmUrl = URL.createObjectURL(webmBlob);
-        setRecorded(webmUrl);
-        const a = document.createElement("a");
-        a.href = webmUrl;
-        a.download = `vozanuncio-${slug}.webm`;
-        a.click();
+        onDone(blob, "webm");
       } finally {
         setConverting(false);
       }
@@ -369,41 +376,48 @@ export default function VideoCreator({ initialCredits }: Props) {
 
     try {
       const canvasStream = canvas.captureStream(30);
+      let stream: MediaStream;
+      let audioCtxRef: AudioContext | null = null;
 
       if (audioUrl && audioDisponivel) {
         const audioCtx = new AudioContext();
+        audioCtxRef = audioCtx;
         const dest = audioCtx.createMediaStreamDestination();
         const resp = await fetch(audioUrl);
         const buf = await resp.arrayBuffer();
         const decoded = await audioCtx.decodeAudioData(buf);
         const gain = audioCtx.createGain();
-        gain.gain.value = 1;
         gain.connect(dest);
         const source = audioCtx.createBufferSource();
         source.buffer = decoded;
         source.connect(gain);
-        const combined = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
-        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
-        const recorder = new MediaRecorder(combined, { mimeType });
+        stream = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+        const mimeType = nativeMp4 ?? (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm");
+        const recorder = new MediaRecorder(stream, { mimeType });
         mediaRecorderRef.current = recorder;
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
         recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: "video/webm" });
-          autoStop(recorder, blob);
-          audioCtx.close();
+          const isNative = nativeMp4 !== null;
+          const blob = new Blob(chunks, { type: isNative ? "video/mp4" : "video/webm" });
+          audioCtxRef?.close();
+          if (isNative) onDone(blob, "mp4");
+          else onWebmBlob(blob);
         };
         recorder.start(100);
         startAnimation(linhas, estilo, audioDuration);
         source.start();
         setTimeout(() => { if (recorder.state !== "inactive") recorder.stop(); }, (audioDuration + 0.8) * 1000);
       } else {
-        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm";
-        const recorder = new MediaRecorder(canvasStream, { mimeType });
+        stream = canvasStream;
+        const mimeType = nativeMp4 ?? (MediaRecorder.isTypeSupported("video/webm;codecs=vp9") ? "video/webm;codecs=vp9" : "video/webm");
+        const recorder = new MediaRecorder(stream, { mimeType });
         mediaRecorderRef.current = recorder;
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
         recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: "video/webm" });
-          autoStop(recorder, blob);
+          const isNative = nativeMp4 !== null;
+          const blob = new Blob(chunks, { type: isNative ? "video/mp4" : "video/webm" });
+          if (isNative) onDone(blob, "mp4");
+          else onWebmBlob(blob);
         };
         recorder.start(100);
         startAnimation(linhas, estilo, audioDuration);
