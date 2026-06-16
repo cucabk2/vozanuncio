@@ -301,7 +301,10 @@ export default function VideoCreator({ initialCredits }: Props) {
         script = decodeURIComponent(res.headers.get("X-Script") ?? "");
         linhas = JSON.parse(decodeURIComponent(res.headers.get("X-Linhas") ?? "[]"));
         const imgHeader = res.headers.get("X-Imagem-Url");
-        if (imgHeader) imagemUrl = decodeURIComponent(imgHeader);
+        if (imgHeader) {
+          const raw = decodeURIComponent(imgHeader);
+          imagemUrl = `/api/proxy-image?url=${encodeURIComponent(raw)}`;
+        }
 
         // Get audio duration
         audioDuration = await new Promise((resolve) => {
@@ -313,7 +316,7 @@ export default function VideoCreator({ initialCredits }: Props) {
         const d = await res.json();
         script = d.script;
         linhas = d.linhas;
-        if (d.imagemUrl) imagemUrl = d.imagemUrl;
+        if (d.imagemUrl) imagemUrl = `/api/proxy-image?url=${encodeURIComponent(d.imagemUrl)}`;
       }
 
       setCredits(remaining);
