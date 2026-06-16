@@ -280,43 +280,32 @@ export default function VideoCreator({ initialCredits }: Props) {
         }),
       });
 
-      const remaining = parseInt(res.headers.get("X-Credits-Remaining") ?? String(credits - 1));
-
       if (res.status === 402) { const d = await res.json(); setError(d.error); return; }
       if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "Erro"); }
 
-      setLoadingStep("Sintetizando voz profissional...");
-      const contentType = res.headers.get("Content-Type") ?? "";
+      setLoadingStep("Finalizando...");
+      const d = await res.json();
+      const script: string = d.script;
+      const linhas: string[] = d.linhas;
+      const remaining: number = d.credits ?? credits - 1;
+      const imagemUrl: string = d.imagemDataUrl ?? form.imagemUrl ?? "";
+
       let audioUrl: string | null = null;
-      let script = "";
-      let linhas: string[] = [];
-      let imagemUrl = form.imagemUrl;
       let audioDisponivel = false;
       let audioDuration = 8;
 
-      if (contentType.includes("audio/mpeg")) {
+      if (d.audioBase64) {
         audioDisponivel = true;
-        const blob = await res.blob();
+        const binary = atob(d.audioBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "audio/mpeg" });
         audioUrl = URL.createObjectURL(blob);
-        script = decodeURIComponent(res.headers.get("X-Script") ?? "");
-        linhas = JSON.parse(decodeURIComponent(res.headers.get("X-Linhas") ?? "[]"));
-        const imgHeader = res.headers.get("X-Imagem-Url");
-        if (imgHeader) {
-          const raw = decodeURIComponent(imgHeader);
-          imagemUrl = `/api/proxy-image?url=${encodeURIComponent(raw)}`;
-        }
-
-        // Get audio duration
         audioDuration = await new Promise((resolve) => {
           const a = new Audio(audioUrl!);
           a.onloadedmetadata = () => resolve(a.duration || 8);
           a.onerror = () => resolve(8);
         });
-      } else {
-        const d = await res.json();
-        script = d.script;
-        linhas = d.linhas;
-        if (d.imagemUrl) imagemUrl = `/api/proxy-image?url=${encodeURIComponent(d.imagemUrl)}`;
       }
 
       setCredits(remaining);

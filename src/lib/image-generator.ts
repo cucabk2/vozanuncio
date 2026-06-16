@@ -1,11 +1,11 @@
 import OpenAI from "openai";
 
 const STYLE_PROMPT: Record<string, string> = {
-  energetico: "dynamic action shot, vibrant orange and white colors, energetic atmosphere",
-  urgencia: "bold dramatic lighting, red accents, sense of urgency",
-  emocional: "warm emotional lifestyle photography, soft golden light",
-  sofisticado: "luxury minimalist product photography, black and white marble, premium",
-  humor: "fun colorful pop art style, playful bright colors",
+  energetico: "dynamic action shot, vibrant orange and white background, energetic product display",
+  urgencia: "bold dramatic lighting, red and dark background, urgent powerful product display",
+  emocional: "warm lifestyle photography, soft golden light, emotional connection, beautiful product",
+  sofisticado: "luxury minimalist product photography, white marble background, premium elegant display",
+  humor: "fun colorful pop art style, playful bright colors, cheerful product display",
 };
 
 export async function generateProductImage(
@@ -19,20 +19,21 @@ export async function generateProductImage(
   const client = new OpenAI({ apiKey });
   const styleDesc = STYLE_PROMPT[estilo] ?? STYLE_PROMPT.energetico;
 
-  const prompt = `Professional commercial advertisement product photo: ${produto}. ${beneficio}. Visual style: ${styleDesc}. Ultra-high quality product photography, clean composition, suitable for social media ads, photorealistic. NO text, NO watermarks, NO logos.`;
+  const prompt = `Professional commercial advertisement: ${produto}. ${beneficio}. Style: ${styleDesc}. Clean composition, suitable for social media ads, photorealistic product photography. NO text overlays, NO watermarks.`;
 
   try {
     const response = await client.images.generate({
-      model: "dall-e-3",
+      model: "gpt-image-1",
       prompt,
       n: 1,
       size: "1024x1024",
-      quality: "standard",
-    });
+    } as Parameters<typeof client.images.generate>[0]);
 
-    return response.data?.[0]?.url ?? null;
+    const b64 = (response.data?.[0] as { b64_json?: string })?.b64_json;
+    if (!b64) return null;
+    return `data:image/png;base64,${b64}`;
   } catch (err) {
-    console.error("DALL-E error:", err);
+    console.error("Image generation error:", err);
     return null;
   }
 }

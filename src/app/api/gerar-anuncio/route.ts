@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Gerar script com IA (Claude) ou fallback para templates
+  // Gerar script com IA (Claude)
   let script: string, linhas: string[];
   try {
     ({ script, linhas } = await gerarScriptIA({
@@ -70,26 +70,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erro ao gerar script" }, { status: 500 });
   }
 
-  // Gerar imagem com DALL-E 3 se não foi fornecida URL
-  let imagemUrl = imagemUrlInput ?? "";
-  if (!imagemUrl) {
-    try {
-      const gerada = await generateProductImage(produto.trim(), beneficio.trim(), estilo);
-      if (gerada) imagemUrl = gerada;
-    } catch (err) {
-      console.error("generateProductImage error:", err);
-      // continua sem imagem
-    }
-  }
+  // Gerar imagem e voz em paralelo
+  const [imagemDataUrl, audioBuffer] = await Promise.all([
+    imagemUrlInput
+      ? Promise.resolve(null)
+      : generateProductImage(produto.trim(), beneficio.trim(), estilo).catch((err) => {
+          console.error("generateProductImage error:", err);
+          return null;
+        }),
+    generateVoice(script, voz ?? "feminina").catch((err) => {
+      console.error("generateVoice error:", err);
+      return null;
+    }),
+  ]);
 
-  // Gerar voz com OpenAI TTS
-  let audioBuffer: ArrayBuffer | null = null;
-  try {
-    audioBuffer = await generateVoice(script, voz ?? "feminina");
-  } catch (err) {
-    console.error("generateVoice error:", err);
-    // continua sem áudio
-  }
+  const imagemFinal = imagemUrlInput ?? imagemDataUrl ?? null;
 
   let remaining: number;
   try {
@@ -111,24 +106,20 @@ export async function POST(req: NextRequest) {
     // não bloqueia se falhar
   }
 
-  // Retornar áudio com metadados, ou JSON se sem áudio
+  // Converter áudio para base64 se disponível
+  let audioBase64: string | null = null;
   if (audioBuffer) {
-    const headers: Record<string, string> = {
-      "Content-Type": "audio/mpeg",
-      "X-Credits-Remaining": String(remaining),
-      "X-Script": encodeURIComponent(script),
-      "X-Linhas": encodeURIComponent(JSON.stringify(linhas)),
-      "Access-Control-Expose-Headers": "X-Credits-Remaining, X-Script, X-Linhas, X-Imagem-Url",
-    };
-    if (imagemUrl) {
-      headers["X-Imagem-Url"] = encodeURIComponent(imagemUrl);
-      headers["Access-Control-Expose-Headers"] = "X-Credits-Remaining, X-Script, X-Linhas, X-Imagem-Url";
-    }
-    return new NextResponse(audioBuffer, { headers });
+    const bytes = new Uint8Array(audioBuffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    audioBase64 = btoa(binary);
   }
 
-  return NextResponse.json(
-    { script, linhas, credits: remaining, audioDisponivel: false, imagemUrl },
-    { status: 200, headers: { "X-Credits-Remaining": String(remaining) } }
-  );
+  return NextResponse.json({
+    script,
+    linhas,
+    credits: remaining,
+    audioBase64,
+    imagemDataUrl: imagemFinal,
+  });
 }
