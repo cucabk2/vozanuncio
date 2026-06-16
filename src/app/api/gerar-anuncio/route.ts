@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { gerarScriptIA } from "@/lib/ai-script-generator";
 import { type Estilo } from "@/lib/script-generator";
 import { generateVoice } from "@/lib/tts";
+import { generateProductImage } from "@/lib/image-generator";
 import { getCredits, deductCredit } from "@/lib/credits";
 import pg from "pg";
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Corpo inválido" }, { status: 400 });
   }
 
-  const { produto, beneficio, preco, estilo, voz, imagemUrl } = body;
+  const { produto, beneficio, preco, estilo, voz, imagemUrl: imagemUrlInput } = body;
 
   if (!produto || typeof produto !== "string" || produto.trim().length < 2) {
     return NextResponse.json({ error: "Nome do produto obrigatório (mín. 2 caracteres)" }, { status: 400 });
@@ -69,7 +70,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erro ao gerar script" }, { status: 500 });
   }
 
-  // Gerar voz com ElevenLabs
+  // Gerar imagem com DALL-E 3 se não foi fornecida URL
+  let imagemUrl = imagemUrlInput ?? "";
+  if (!imagemUrl) {
+    try {
+      const gerada = await generateProductImage(produto.trim(), beneficio.trim(), estilo);
+      if (gerada) imagemUrl = gerada;
+    } catch (err) {
+      console.error("generateProductImage error:", err);
+      // continua sem imagem
+    }
+  }
+
+  // Gerar voz com OpenAI TTS
   let audioBuffer: ArrayBuffer | null = null;
   try {
     audioBuffer = await generateVoice(script, voz ?? "feminina");
@@ -105,10 +118,11 @@ export async function POST(req: NextRequest) {
       "X-Credits-Remaining": String(remaining),
       "X-Script": encodeURIComponent(script),
       "X-Linhas": encodeURIComponent(JSON.stringify(linhas)),
-      "Access-Control-Expose-Headers": "X-Credits-Remaining, X-Script, X-Linhas",
+      "Access-Control-Expose-Headers": "X-Credits-Remaining, X-Script, X-Linhas, X-Imagem-Url",
     };
     if (imagemUrl) {
       headers["X-Imagem-Url"] = encodeURIComponent(imagemUrl);
+      headers["Access-Control-Expose-Headers"] = "X-Credits-Remaining, X-Script, X-Linhas, X-Imagem-Url";
     }
     return new NextResponse(audioBuffer, { headers });
   }

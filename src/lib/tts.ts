@@ -1,35 +1,29 @@
-const VOICE_IDS: Record<string, string> = {
-  feminina: "EXAVITQu4vr4xnSDxMaL",
-  masculino: "29vD33N1osed6aR8gs3S",
-  jovem: "21m00Tcm4TlvDq8ikWAM",
-  formal: "ErXwobaYiN019PkySvjV",
+import OpenAI from "openai";
+
+const VOICE_MAP: Record<string, "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer"> = {
+  feminina: "nova",     // voz jovial, energética, feminina
+  jovem: "shimmer",    // expressiva e agradável
+  masculino: "onyx",   // grave, autoridade
+  formal: "echo",      // neutro, profissional
 };
 
 export async function generateVoice(script: string, voz = "feminina"): Promise<ArrayBuffer | null> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const voiceId = VOICE_IDS[voz] ?? VOICE_IDS.feminina;
+  const client = new OpenAI({ apiKey });
+  const voice = VOICE_MAP[voz] ?? "nova";
 
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-    method: "POST",
-    headers: {
-      "xi-api-key": apiKey,
-      "Content-Type": "application/json",
-      Accept: "audio/mpeg",
-    },
-    body: JSON.stringify({
-      text: script,
-      model_id: "eleven_turbo_v2_5",
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    console.error(`ElevenLabs ${res.status}:`, err);
+  try {
+    const mp3 = await client.audio.speech.create({
+      model: "tts-1-hd",
+      voice,
+      input: script,
+      speed: 1.15,
+    });
+    return mp3.arrayBuffer();
+  } catch (err) {
+    console.error("OpenAI TTS error:", err);
     return null;
   }
-
-  return res.arrayBuffer();
 }
