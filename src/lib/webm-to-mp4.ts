@@ -40,8 +40,8 @@ export async function webmToMp4(
   const data = await ffmpeg.readFile("output.mp4");
   await ffmpeg.deleteFile("input.webm");
   await ffmpeg.deleteFile("output.mp4");
-  // Copy buffer to plain ArrayBuffer to satisfy Blob constructor types
-  const u8 = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
+  // FileData = Uint8Array | string; binary output is always Uint8Array
+  const u8 = (data as unknown) as Uint8Array;
   const copy = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
   return new Blob([copy], { type: "video/mp4" });
 }
