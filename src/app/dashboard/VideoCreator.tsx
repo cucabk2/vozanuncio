@@ -4,6 +4,7 @@ import {
   Loader2, Play, Pause, Download, Sparkles, RefreshCw,
   Video, Music2, Image as ImageIcon, ChevronRight, Check
 } from "lucide-react";
+import { webmToMp4 } from "@/lib/webm-to-mp4";
 
 type Estilo = "energetico" | "sofisticado" | "urgencia" | "emocional" | "humor";
 type Formato = "916" | "11" | "169";
@@ -63,6 +64,7 @@ export default function VideoCreator({ initialCredits }: Props) {
   } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [recorded, setRecorded] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -340,14 +342,29 @@ export default function VideoCreator({ initialCredits }: Props) {
     setRecorded(null);
     const chunks: Blob[] = [];
 
-    function autoStop(recorder: MediaRecorder, blobUrl: string) {
+    async function autoStop(_recorder: MediaRecorder, webmBlob: Blob) {
       const slug = nomeProduto.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 30);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `vozanuncio-${slug}.webm`;
-      a.click();
-      setRecorded(blobUrl);
       setRecording(false);
+      setConverting(true);
+      try {
+        const mp4Blob = await webmToMp4(webmBlob);
+        const mp4Url = URL.createObjectURL(mp4Blob);
+        setRecorded(mp4Url);
+        const a = document.createElement("a");
+        a.href = mp4Url;
+        a.download = `vozanuncio-${slug}.mp4`;
+        a.click();
+      } catch {
+        // fallback: download webm if conversion fails
+        const webmUrl = URL.createObjectURL(webmBlob);
+        setRecorded(webmUrl);
+        const a = document.createElement("a");
+        a.href = webmUrl;
+        a.download = `vozanuncio-${slug}.webm`;
+        a.click();
+      } finally {
+        setConverting(false);
+      }
     }
 
     try {
@@ -372,7 +389,7 @@ export default function VideoCreator({ initialCredits }: Props) {
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
         recorder.onstop = () => {
           const blob = new Blob(chunks, { type: "video/webm" });
-          autoStop(recorder, URL.createObjectURL(blob));
+          autoStop(recorder, blob);
           audioCtx.close();
         };
         recorder.start(100);
@@ -386,7 +403,7 @@ export default function VideoCreator({ initialCredits }: Props) {
         recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
         recorder.onstop = () => {
           const blob = new Blob(chunks, { type: "video/webm" });
-          autoStop(recorder, URL.createObjectURL(blob));
+          autoStop(recorder, blob);
         };
         recorder.start(100);
         startAnimation(linhas, estilo, audioDuration);
@@ -486,6 +503,8 @@ export default function VideoCreator({ initialCredits }: Props) {
   function resetar() {
     setResultado(null);
     setRecorded(null);
+    setRecording(false);
+    setConverting(false);
     setPlaying(false);
     window.speechSynthesis?.cancel();
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -691,14 +710,16 @@ export default function VideoCreator({ initialCredits }: Props) {
                 estilo: form.estilo,
                 nomeProduto: form.produto,
               })}
-              disabled={recording}
+              disabled={recording || converting}
               className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold py-3 rounded-xl transition-colors"
             >
               {recording
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Gravando...</>
+                : converting
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Convertendo MP4...</>
                 : recorded
-                ? <><Download className="w-4 h-4" /> Baixar novamente</>
-                : <><Video className="w-4 h-4" /> Gravar e Baixar vídeo</>
+                ? <><Download className="w-4 h-4" /> Baixar MP4 novamente</>
+                : <><Video className="w-4 h-4" /> Gravar e Baixar MP4</>
               }
             </button>
 
@@ -719,9 +740,9 @@ export default function VideoCreator({ initialCredits }: Props) {
             </button>
           </div>
 
-          {recording && (
+          {(recording || converting) && (
             <p className="text-white/40 text-xs text-center">
-              Aguarde... o vídeo será gerado automaticamente ao terminar a gravação
+              {recording ? "Gravando animação..." : "Convertendo para MP4... aguarde ~10s"}
             </p>
           )}
 
