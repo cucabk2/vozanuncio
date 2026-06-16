@@ -4,7 +4,7 @@ import { gerarScriptIA } from "@/lib/ai-script-generator";
 import { type Estilo } from "@/lib/script-generator";
 import { generateVoice } from "@/lib/tts";
 import { getCredits, deductCredit } from "@/lib/credits";
-import { prisma } from "@/lib/prisma";
+import pg from "pg";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -56,15 +56,27 @@ export async function POST(req: NextRequest) {
   }
 
   // Gerar script com IA (Claude) ou fallback para templates
-  const { script, linhas } = await gerarScriptIA({
-    produto: produto.trim(),
-    beneficio: beneficio.trim(),
-    preco,
-    estilo,
-  });
+  let script: string, linhas: string[];
+  try {
+    ({ script, linhas } = await gerarScriptIA({
+      produto: produto.trim(),
+      beneficio: beneficio.trim(),
+      preco,
+      estilo,
+    }));
+  } catch (err) {
+    console.error("gerarScriptIA error:", err);
+    return NextResponse.json({ error: "Erro ao gerar script" }, { status: 500 });
+  }
 
   // Gerar voz com ElevenLabs
-  const audioBuffer = await generateVoice(script, voz ?? "feminina");
+  let audioBuffer: ArrayBuffer | null = null;
+  try {
+    audioBuffer = await generateVoice(script, voz ?? "feminina");
+  } catch (err) {
+    console.error("generateVoice error:", err);
+    // continua sem áudio
+  }
 
   let remaining: number;
   try {
@@ -75,9 +87,13 @@ export async function POST(req: NextRequest) {
 
   // Salvar no histórico
   try {
-    await prisma.anuncio.create({
-      data: { email, produto: produto.trim(), script, estilo },
-    });
+    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    await client.query(
+      'INSERT INTO "Anuncio" (id, email, produto, script, estilo, "createdAt") VALUES ($1, $2, $3, $4, $5, NOW())',
+      [crypto.randomUUID(), email, produto.trim(), script, estilo]
+    );
+    await client.end().catch(() => {});
   } catch {
     // não bloqueia se falhar
   }
