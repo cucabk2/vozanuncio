@@ -40,8 +40,8 @@ export async function webmToMp4(
   const data = await ffmpeg.readFile("output.mp4");
   await ffmpeg.deleteFile("input.webm");
   await ffmpeg.deleteFile("output.mp4");
-  // FileData = Uint8Array | string; binary output is always Uint8Array
-  const u8 = (data as unknown) as Uint8Array;
-  const copy = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
-  return new Blob([copy], { type: "video/mp4" });
+  // FileData = Uint8Array | string; binary output is always Uint8Array.
+  // new Uint8Array(src) copies to a fresh plain ArrayBuffer — avoids SharedArrayBuffer type error.
+  const bytes = new Uint8Array((data as unknown) as Uint8Array);
+  return new Blob([bytes], { type: "video/mp4" });
 }
