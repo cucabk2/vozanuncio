@@ -69,6 +69,7 @@ export default function VideoCreator({ initialCredits }: Props) {
   const animFrameRef = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [previewImg, setPreviewImg] = useState<HTMLImageElement | null>(null);
+  const drawFrameRef = useRef<((ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, linhas: string[], elapsed: number, totalDuration: number, estilo: Estilo) => void) | null>(null);
 
   const formato = FORMATOS.find((f) => f.id === form.formato) ?? FORMATOS[0];
 
@@ -77,7 +78,8 @@ export default function VideoCreator({ initialCredits }: Props) {
     const url = resultado?.imagemUrl || form.imagemUrl;
     if (!url) { setPreviewImg(null); return; }
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    // crossOrigin not needed for data URLs, skip to avoid load failure
+    if (!url.startsWith("data:")) img.crossOrigin = "anonymous";
     img.onload = () => setPreviewImg(img);
     img.onerror = () => setPreviewImg(null);
     img.src = url;
@@ -212,6 +214,9 @@ export default function VideoCreator({ initialCredits }: Props) {
     [previewImg]
   );
 
+  // Always keep ref pointing to latest drawFrame so animation tick never has stale closure
+  useEffect(() => { drawFrameRef.current = drawFrame; }, [drawFrame]);
+
   const startAnimation = useCallback(
     (linhas: string[], estilo: Estilo, totalDuration: number) => {
       const canvas = canvasRef.current;
@@ -224,14 +229,15 @@ export default function VideoCreator({ initialCredits }: Props) {
 
       function tick() {
         const elapsed = (Date.now() - start) / 1000;
-        drawFrame(ctx!, canvas!, linhas, elapsed, totalDuration, estilo);
+        // Use ref so image updates mid-animation when previewImg loads
+        drawFrameRef.current?.(ctx!, canvas!, linhas, elapsed, totalDuration, estilo);
         if (elapsed < totalDuration + 0.5) {
           animFrameRef.current = requestAnimationFrame(tick);
         }
       }
       animFrameRef.current = requestAnimationFrame(tick);
     },
-    [drawFrame]
+    [] // intentionally empty — uses drawFrameRef to avoid stale closure
   );
 
   function playBrowserTTS(text: string) {
