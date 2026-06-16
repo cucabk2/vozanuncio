@@ -317,19 +317,11 @@ export default function VideoCreator({ initialCredits }: Props) {
       setCredits(remaining);
       setResultado({ script, linhas, audioUrl, audioDisponivel, imagemUrl, audioDuration });
 
-      // Preview animation starts immediately
       setTimeout(() => {
         startAnimation(linhas, form.estilo, audioDuration);
         if (audioUrl && audioRef.current) { audioRef.current.play(); setPlaying(true); }
         else playBrowserTTS(script);
       }, 100);
-
-      // Auto-record + download 1.5s later (gives image time to decode)
-      const nomeProduto = form.produto;
-      const estiloCaptura = form.estilo;
-      setTimeout(() => {
-        gravarEBaixar({ linhas, audioUrl, audioDisponivel, audioDuration, estilo: estiloCaptura, nomeProduto });
-      }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro desconhecido");
     } finally {
@@ -691,13 +683,22 @@ export default function VideoCreator({ initialCredits }: Props) {
             </button>
 
             <button
-              onClick={gravarVideo}
+              onClick={() => gravarEBaixar({
+                linhas: resultado.linhas,
+                audioUrl: resultado.audioUrl,
+                audioDisponivel: resultado.audioDisponivel,
+                audioDuration: resultado.audioDuration,
+                estilo: form.estilo,
+                nomeProduto: form.produto,
+              })}
               disabled={recording}
               className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold py-3 rounded-xl transition-colors"
             >
               {recording
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Gravando...</>
-                : <><Video className="w-4 h-4" /> Gravar vídeo</>
+                : recorded
+                ? <><Download className="w-4 h-4" /> Baixar novamente</>
+                : <><Video className="w-4 h-4" /> Gravar e Baixar vídeo</>
               }
             </button>
 
@@ -710,18 +711,9 @@ export default function VideoCreator({ initialCredits }: Props) {
               </button>
             )}
 
-            {recorded && (
-              <button
-                onClick={() => downloadFile(recorded, `vozanuncio-${form.produto.replace(/\s+/g, "-")}.webm`)}
-                className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white text-sm font-bold py-3 rounded-xl transition-colors"
-              >
-                <Download className="w-4 h-4" /> Baixar WebM
-              </button>
-            )}
-
             <button
               onClick={resetar}
-              className={`flex items-center justify-center gap-2 border border-white/10 hover:bg-white/5 text-white/50 hover:text-white text-sm py-3 rounded-xl transition-colors ${recorded ? "" : "col-span-2"}`}
+              className={`flex items-center justify-center gap-2 border border-white/10 hover:bg-white/5 text-white/50 hover:text-white text-sm py-3 rounded-xl transition-colors ${resultado.audioUrl ? "" : "col-span-2"}`}
             >
               <RefreshCw className="w-4 h-4" /> Novo anúncio <ChevronRight className="w-3 h-3" />
             </button>
